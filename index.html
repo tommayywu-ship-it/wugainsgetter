@@ -226,6 +226,8 @@ body[data-rest="1"] .exList{padding-bottom:150px}
   text-transform:uppercase;margin-bottom:5px}
 .fld input{width:100%;min-height:var(--tap);padding:10px 6px;background:#000;color:var(--fg);
   border:1px solid var(--line);border-radius:2px;text-align:center;font-family:'Anton';font-size:20px}
+.fld input[type=date]{font-size:16px;font-family:'Archivo';font-weight:600;
+  -webkit-appearance:none;appearance:none}
 .stats{display:grid;grid-template-columns:repeat(3,1fr)}
 .stat{padding:18px 14px;border-right:1px solid var(--line)}
 .stat:last-child{border-right:0}
@@ -613,7 +615,7 @@ function chipBar(id){
 }
 
 /* ============ state ============ */
-var S={week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]};
+var S={week:1,reach:null,touch:null,barWeight:55,blockStart:null,log:[],done:{},active:null,sessions:[]};
 function load(){try{var r=localStorage.getItem("vert.v2");
  if(r){S=Object.assign(S,JSON.parse(r));}
  else{var o=localStorage.getItem("vert.v1");if(o)S=Object.assign(S,JSON.parse(o));}}catch(e){}}
@@ -1135,6 +1137,21 @@ function viewTargets(){
  return h;}
 
 
+
+/* Monday that starts week 1; defaults to the Monday of the week you first opened the app */
+function blockStart(){
+ if(S.blockStart)return S.blockStart;
+ var d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));
+ S.blockStart=dayKey(d.getTime());save();
+ return S.blockStart;
+}
+/* the calendar date a given week+day of the program falls on */
+function programDate(week,dayIdx){
+ var b=blockStart().split("-");
+ var d=new Date(+b[0],+b[1]-1,+b[2]);
+ d.setDate(d.getDate()+(week-1)*7+dayIdx);
+ return dayKey(d.getTime());
+}
 /* ===== month calendar ===== */
 var calM=null;
 function initCal(){if(!calM){var d=new Date();calM={y:d.getFullYear(),m:d.getMonth()};}}
@@ -1157,31 +1174,32 @@ function calData(){
   if(!map[k]||pct>map[k].pct)map[k]=Object.assign({pct:pct,name:name},extra||{});};
 
  S.sessions.forEach(function(rec){
-  var ts=rec.finishedAt||rec.startedAt;if(!ts)return;
-  put(dayKey(ts),sessionPct(rec),DAYS[rec.day]?DAYS[rec.day].t:"Session",{done:!!rec.finishedAt});});
+  put(programDate(rec.week,rec.day),sessionPct(rec),
+      DAYS[rec.day]?DAYS[rec.day].t:"Session",{done:!!rec.finishedAt});});
 
  if(S.active)
-  put(dayKey(S.active.startedAt),sessionPct(S.active),
+  put(programDate(S.active.week,S.active.day),sessionPct(S.active),
       DAYS[S.active.day]?DAYS[S.active.day].t:"Session",{live:true});
 
  /* anything logged before session records existed, or logged without pressing Finish:
     work out completion from how many of that day's exercises have entries */
- var byDate={};
+ var byWD={};
  S.log.forEach(function(x){
-  if(!x.date)return;
-  (byDate[x.date]=byDate[x.date]||{ex:{},day:x.day}).ex[x.ex]=true;});
- Object.keys(byDate).forEach(function(k){
-  var b=byDate[k],di=-1;
-  DAYS.forEach(function(d,i){if(d.k===b.day)di=i;});
-  var total=(di>=0&&DAYS[di].ex.length)?DAYS[di].ex.length:Object.keys(b.ex).length;
+  var di=-1;DAYS.forEach(function(d,i){if(d.k===x.day)di=i;});
+  if(di<0||!x.week)return;
+  var key=x.week+":"+di;
+  (byWD[key]=byWD[key]||{ex:{},w:x.week,d:di}).ex[x.ex]=true;});
+ Object.keys(byWD).forEach(function(key){
+  var b=byWD[key];
+  var total=DAYS[b.d].ex.length||Object.keys(b.ex).length;
   var pct=Math.min(1,Object.keys(b.ex).length/Math.max(1,total));
-  put(k,pct,di>=0?DAYS[di].t:"Logged",{done:true});});
+  put(programDate(b.w,b.d),pct,DAYS[b.d].t,{done:true});});
  return map;
 }
 function viewCalendar(){
  initCal();
  var y=calM.y,m=calM.m,data=calData();
- var first=new Date(y,m,1),lead=(first.getDay()+6)%7;      // Monday-first
+ var first=new Date(y,m,1),lead=first.getDay();            // Sunday-first
  var days=new Date(y,m+1,0).getDate();
  var todayK=dayKey();
  var hit=0,sets=0;
@@ -1189,7 +1207,7 @@ function viewCalendar(){
   '<button class="ic" id="cPrev" aria-label="Previous month">'+ICO.left+'</button>'+
   '<div class="calT"><b>'+MON[m]+'</b><span>'+y+'</span></div>'+
   '<button class="ic" id="cNext" aria-label="Next month">'+ICO.right+'</button></div>'+
-  '<div class="calHd">'+["M","T","W","T","F","S","S"].map(function(d){
+  '<div class="calHd">'+["S","M","T","W","T","F","S"].map(function(d){
    return '<span>'+d+'</span>';}).join("")+'</div><div class="calGrid">';
  for(var i=0;i<lead;i++)h+='<span class="cal pad"></span>';
  for(var d2=1;d2<=days;d2++){
@@ -1305,8 +1323,11 @@ function viewData(){
   '<input type="number" inputmode="decimal" id="inTouch" value="'+(S.touch||"")+'" placeholder="—"></div></div>'+
   '<div class="row"><div class="fld" style="flex:1"><label>Trap bar weight (lb)</label>'+
   '<input type="number" inputmode="decimal" id="inBar" value="'+(S.barWeight||"")+'" placeholder="—"></div></div>'+
+  '<div class="row"><div class="fld" style="flex:1"><label>Week 1 starts (Monday)</label>'+
+  '<input type="date" id="inStart" value="'+(S.blockStart||blockStart())+'"></div></div>'+
   '<div class="row"><button class="btn" id="saveReach" style="flex:1">Save numbers</button></div>'+
   '<div class="note">Stand flat-footed against a wall and reach up with one arm — that is your standing reach. Then jump and mark the highest point you touch. The rim is 120 inches.<br><br>'+
+  'Week 1 start sets where the calendar puts each session — a Wednesday workout lands on the Wednesday of its program week, whenever you actually tapped it in.<br><br>'+
   'Trap bar defaults to 55 lb. The bar counts as load you accelerate, so the target for the jump is a total that already includes it — 55 on its own is about 30% of your bodyweight. Change this if your bar is a different weight.</div></div>';
  h+='<div class="block"><div class="blockHd"><h2>Backups</h2><span class="cnt">'+S.log.length+' entries</span></div>'+
   '<div class="note">Everything lives in this browser only. It will not follow you to another phone and clearing site data wipes it. Export every few weeks.</div>'+
@@ -1325,6 +1346,8 @@ function wireData(){
       t=parseFloat(document.getElementById("inTouch").value);
   var bw=parseFloat(document.getElementById("inBar").value);
   if(bw>0)S.barWeight=bw;
+  var st=document.getElementById("inStart");
+  if(st&&st.value)S.blockStart=st.value;
   if(r&&t){
    if(t<r){toast("Touch must exceed reach");return;}
    S.reach=r;S.touch=t;}
@@ -1340,13 +1363,13 @@ function wireData(){
  document.getElementById("impFile").onchange=function(ev){
   var f=ev.target.files[0];if(!f)return;var fr=new FileReader();
   fr.onload=function(){try{var o=JSON.parse(fr.result);if(!o||!Array.isArray(o.log))throw 0;
-   S=Object.assign({week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]},o);
+   S=Object.assign({week:1,reach:null,touch:null,barWeight:55,blockStart:null,log:[],done:{},active:null,sessions:[]},o);
    save();toast("Restored");go("#/w"+S.week);render();
   }catch(e){toast("Not a valid backup");}};
   fr.readAsText(f);};
  document.getElementById("wipe").onclick=function(){
   if(confirm("Erase all sessions and numbers? This cannot be undone.")){
-   S={week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]};
+   S={week:1,reach:null,touch:null,barWeight:55,blockStart:null,log:[],done:{},active:null,sessions:[]};
    save();toast("Erased");render();}};}
 function dl(txt,name,mime){
  var b=new Blob([txt],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");
