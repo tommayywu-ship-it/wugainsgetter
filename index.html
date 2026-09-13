@@ -22,7 +22,8 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);
+html{overscroll-behavior-x:none}
+body{margin:0;background:var(--bg);color:var(--fg);overscroll-behavior-x:none;
   font-family:'Archivo',system-ui,sans-serif;font-size:16px;line-height:1.45;
   -webkit-font-smoothing:antialiased;overscroll-behavior-y:contain}
 body[data-nav="1"]{padding-bottom:calc(74px + env(safe-area-inset-bottom))}
@@ -244,7 +245,8 @@ body[data-rest="1"] .exList{padding-bottom:150px}
   color:var(--acc);text-transform:uppercase}
 .empty{padding:34px 20px;text-align:center;color:var(--dim);font-size:14px;line-height:1.65}
 
-.tblWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tblWrap{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  overscroll-behavior-x:contain;overscroll-behavior-y:auto;touch-action:pan-x pan-y}
 .tblWrap::-webkit-scrollbar{display:none}
 table.tgt{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:100%}
 table.tgt th,table.tgt td{padding:0;text-align:center;white-space:nowrap}
@@ -303,6 +305,27 @@ nav button[data-on="1"] .nb{background:var(--acc)}
 .chip.clr{color:var(--dim)}
 
 .chipTot b{font-family:'Anton';font-weight:400;font-size:16px;color:var(--acc);letter-spacing:0}
+
+/* ===== calendar ===== */
+.calTop{display:flex;align-items:center;justify-content:space-between;padding:12px 6px 4px}
+.calT{text-align:center;flex:1}
+.calT b{display:block;font-family:'Anton';font-size:25px;text-transform:uppercase;line-height:1}
+.calT span{display:block;font-size:10px;font-weight:700;letter-spacing:.16em;color:var(--dim);
+  margin-top:4px}
+.calHd{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;padding:8px 14px 4px}
+.calHd span{text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.08em;color:var(--dim)}
+.calGrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;padding:0 14px 12px}
+.cal{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:2px;
+  background:var(--s1);overflow:hidden;display:block}
+.cal.pad{border:0;background:none}
+.cal i{position:absolute;left:0;right:0;bottom:0;background:var(--acc);display:block}
+.cal em{position:absolute;inset:0;display:grid;place-items:center;font-style:normal;
+  font-family:'Anton';font-size:13px;color:var(--dim);z-index:1}
+.cal[data-has="1"] em{color:var(--on);text-shadow:0 1px 2px rgba(0,0,0,.55)}
+.cal[data-today="1"]{border-color:var(--fg);border-width:2px}
+.cal[data-live="1"] i{background:repeating-linear-gradient(45deg,var(--acc) 0 6px,var(--acc-d) 6px 12px)}
+.calFoot{padding:0 18px 16px;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--dim);line-height:1.6}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -668,8 +691,8 @@ function render(){
  var app=document.getElementById("app");
  stopTick();
  if(route.v==="session"){renderTop_session();app.innerHTML=viewSession();wireSession();}
- else if(route.v==="targets"){renderTop("Targets","Week "+route.w+" of "+W);app.innerHTML=viewTargets();}
- else if(route.v==="progress"){renderTop("Progress","");app.innerHTML=viewProgress();}
+ else if(route.v==="targets"){renderTop("Targets","Week "+route.w+" of "+W);app.innerHTML=viewTargets();wireTargets();}
+ else if(route.v==="progress"){renderTop("Progress","");app.innerHTML=viewProgress();wireCalendar();}
  else if(route.v==="guide"){renderTop("Guide","One thing to maximize");app.innerHTML=viewGuide();wireGuide();}
  else if(route.v==="data"){renderTop("Data","");app.innerHTML=viewData();wireData();}
  else {renderTop_train();app.innerHTML=viewTrain();wireTrain();}
@@ -1100,6 +1123,86 @@ function viewTargets(){
   'The clean rows barely climb, and that is correct. They sit in a fixed percentage of your max, so the load only rises when the max rises. Retest in week 8 and rebuild the band from the new numbers.</div></div>';
  return h;}
 
+
+/* ===== month calendar ===== */
+var calM=null;
+function initCal(){if(!calM){var d=new Date();calM={y:d.getFullYear(),m:d.getMonth()};}}
+var MON=["January","February","March","April","May","June","July",
+ "August","September","October","November","December"];
+
+function sessionPct(rec){
+ var d=DAYS[rec.day];if(!d||!d.ex.length)return 0;
+ var total=0,done=0;
+ d.ex.forEach(function(id){
+  var n=setsOf(id);total+=n;
+  var arr=(rec.sets&&rec.sets[id])||[];
+  done+=Math.min(n,arr.filter(function(x){return x.done;}).length);});
+ return total?done/total:0;
+}
+/* date string -> {pct, name} for everything finished or in progress */
+function calData(){
+ var map={};
+ S.sessions.forEach(function(rec){
+  var ts=rec.finishedAt||rec.startedAt;if(!ts)return;
+  var k=new Date(ts).toISOString().slice(0,10);
+  var pct=sessionPct(rec);
+  if(!map[k]||pct>map[k].pct)map[k]={pct:pct,name:DAYS[rec.day].t,done:!!rec.finishedAt};});
+ if(S.active){
+  var k2=new Date(S.active.startedAt).toISOString().slice(0,10);
+  var p2=sessionPct(S.active);
+  if(!map[k2]||p2>map[k2].pct)map[k2]={pct:p2,name:DAYS[S.active.day].t,live:true};}
+ // volleyball and other logged work that never became a session record
+ S.log.forEach(function(x){
+  if(!map[x.date])map[x.date]={pct:0.34,name:"Logged",done:true};});
+ return map;
+}
+function viewCalendar(){
+ initCal();
+ var y=calM.y,m=calM.m,data=calData();
+ var first=new Date(y,m,1),lead=(first.getDay()+6)%7;      // Monday-first
+ var days=new Date(y,m+1,0).getDate();
+ var todayK=new Date().toISOString().slice(0,10);
+ var hit=0,sets=0;
+ var h='<div class="block"><div class="calTop">'+
+  '<button class="ic" id="cPrev" aria-label="Previous month">'+ICO.left+'</button>'+
+  '<div class="calT"><b>'+MON[m]+'</b><span>'+y+'</span></div>'+
+  '<button class="ic" id="cNext" aria-label="Next month">'+ICO.right+'</button></div>'+
+  '<div class="calHd">'+["M","T","W","T","F","S","S"].map(function(d){
+   return '<span>'+d+'</span>';}).join("")+'</div><div class="calGrid">';
+ for(var i=0;i<lead;i++)h+='<span class="cal pad"></span>';
+ for(var d2=1;d2<=days;d2++){
+  var k=y+"-"+("0"+(m+1)).slice(-2)+"-"+("0"+d2).slice(-2);
+  var e=data[k],pct=e?Math.max(0.08,e.pct):0;
+  if(e)hit++;
+  h+='<span class="cal" data-has="'+(e?1:0)+'" data-today="'+(k===todayK?1:0)+
+     '" data-live="'+(e&&e.live?1:0)+'" title="'+(e?esc(e.name)+" "+Math.round(e.pct*100)+"%":"")+'">'+
+     (e?'<i style="height:'+(pct*100).toFixed(0)+'%"></i>':'')+
+     '<em>'+d2+'</em></span>';
+ }
+ h+='</div><div class="calFoot">'+hit+' session'+(hit===1?"":"s")+' this month'+
+  ' &middot; squares fill with how much of the workout you finished</div></div>';
+ return h;
+}
+function wireCalendar(){
+ var p=document.getElementById("cPrev"),n=document.getElementById("cNext");
+ var hop=function(delta){
+  calM.m+=delta;
+  if(calM.m<0){calM.m=11;calM.y--;}
+  if(calM.m>11){calM.m=0;calM.y++;}
+  document.getElementById("progBox").innerHTML=viewProgress();
+  wireCalendar();};
+ if(p)p.onclick=function(){hop(-1);};
+ if(n)n.onclick=function(){hop(1);};
+}
+
+function wireTargets(){
+ var wrap=document.querySelector(".tblWrap");if(!wrap)return;
+ var cell=wrap.querySelector('td[data-now="1"]');
+ if(cell){
+  var x=cell.offsetLeft-wrap.clientWidth/2+cell.offsetWidth/2;
+  wrap.scrollLeft=Math.max(0,x);}
+}
+
 /* ============ progress ============ */
 function spark(v,w,h){
  if(v.length<2)return'<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'+
@@ -1116,7 +1219,8 @@ function viewProgress(){
  var done=S.sessions.filter(function(x){return x.finishedAt;}).length;
  var prs=S.log.filter(function(x){return x.pr;}).length;
  var vol=S.log.reduce(function(a,x){return a+((x.load||0)*(x.sets||0)*(x.reps||0));},0);
- var h='<div class="block"><div class="stats">'+
+ var h=viewCalendar();
+ h+='<div class="block"><div class="stats">'+
   '<div class="stat"><div class="v num">'+done+'</div><div class="k">Workouts</div></div>'+
   '<div class="stat"><div class="v num">'+prs+'</div><div class="k">Bests</div></div>'+
   '<div class="stat"><div class="v num">'+(vol>=1000?(vol/1000).toFixed(1)+"k":vol)+'</div><div class="k">Lb moved</div></div>'+
