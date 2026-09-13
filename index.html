@@ -350,6 +350,9 @@ var EX={
   max:"Bar speed. 70-82% of a 175 max. Never grind.",
   how:"From standing, hinge the bar to mid-thigh keeping the back flat, then explode into full extension and catch in a quarter squat. No wind-up means everything is instant force production, which is exactly why it transfers to jumping."},
 
+ bsqt:{n:"Back squat",s:"5 x 3-5",loads:[185,195,205,165,205,215,220,"test"],unit:"lb",
+  max:"Intent to accelerate out of the hole. Depth first, load second.",
+  how:"Bar on the upper traps or rear delts, feet about shoulder width, brace hard before you descend. Sit down between the hips to at least parallel and preferably below. Control the way down, then drive the floor away as fast as you can. Numbers are 75-90% of a 245 max. If your lower back complains at any point, stop the set and move the day\u2019s work to the belt squat."},
  bsq:{n:"Belt squat",s:"5 x 3-5",loads:[170,180,190,150,190,200,210,"test"],unit:"lb",
   max:"Intent to accelerate. The bar moves slowly when heavy; your intent stays maximal.",
   how:"Belt on the hips, descend under control until hamstrings meet calves, torso upright. The machine takes spinal load out, so use the range it gives you. Two seconds down, no pause, drive the platform away as fast as you can. Log your latch position — numbers only compare at the same setting."},
@@ -439,25 +442,40 @@ var DAYS=[
   note:"Counts as a jump day. Dozens of reactive jumps on a hard floor — budget for it."},
  {k:"tue",d:"Tue",t:"Upper",full:"Upper",imp:0,ex:["incdb","lmp","dip","chin","row","face","lat","curl","tri","serr"],
   note:"Maintenance strength and shoulder width. Not a mass day."},
- {k:"wed",d:"Wed",t:"Leg A",full:"Leg A — Max Strength",imp:1,ex:["pogo","boxj","pc","bsq","rfe","nord","scalf","tib"],
-  note:"Heaviest day of the week. Cleans first at low volume, then the heavy belt squat."},
+ {k:"wed",d:"Wed",t:"Leg A",full:"Leg A — Max Strength",imp:1,ex:["pogo","boxj","pc","bsqt","rfe","nord","scalf","tib"],
+  note:"Heaviest day of the week. Cleans first at low volume, then the heavy back squat."},
  {k:"thu",d:"Thu",t:"Upper B",full:"Upper B — Width & Core",imp:0,ex:["latc","lean","rear","face","wide","sapd","hlr","ccr","pallof","serr"],
   note:"Forty minutes, nothing heavy. Friday's power work comes first."},
  {k:"fri",d:"Fri",t:"Leg B",full:"Leg B — Power",imp:1,ex:["depth","slpogo","dunk","hc","tbj","legx","seatcalf"],
   note:"The day that most directly builds the dunk. Everything fast, nothing to failure."},
  {k:"sat",d:"Sat",t:"Leg C",full:"Leg C — Volume",imp:0,ex:["bsqv","rev","rdl","nord","scalf","seatcalf","tib"],
-  note:"No jumps, no impact. Builds what the other two days spend."},
+  note:"No jumps, no impact. Belt squat carries the volume here so the back squat gets Wednesday fresh."},
  {k:"sun",d:"Sun",t:"Rest",full:"Rest",imp:0,ex:[],note:"Full rest. Don't fill it."}
 ];
-var W=8, KEY=["bsq","pc","hc","rfe","scalf","legx","incdb","seatcalf"];
+var W=8, KEY=["bsqt","bsq","pc","hc","rfe","scalf","legx","incdb","seatcalf"];
 
 /* rest seconds by exercise category */
-var REST={};
-["pogo","boxj","depth","slpogo","tbj","dunk"].forEach(function(k){REST[k]=150;});
-["pc","hc"].forEach(function(k){REST[k]=165;});
-["bsq"].forEach(function(k){REST[k]=180;});
-["bsqv","rfe","rev","rdl","nord","incdb","lmp","dip","chin"].forEach(function(k){REST[k]=90;});
+function fmtT(s){s=Math.max(0,Math.round(s));var m=Math.floor(s/60),r=s%60;
+ return m+":"+(r<10?"0":"")+r;}
+var REST={
+ dunk:240,
+ bsq:180, bsqt:180,
+ pc:165, hc:165,
+ depth:150, boxj:150, tbj:150,
+ pogo:120, slpogo:120, bsqv:120,
+ rfe:90, rev:90, rdl:90, nord:90, legx:90,
+ incdb:150, lmp:90, dip:90, chin:120,
+ row:90, wide:90, sapd:60, face:45,
+ lat:60, latc:60, lean:60, rear:60,
+ scalf:60, seatcalf:60, tib:45,
+ hlr:60, ccr:60, pallof:45, serr:45,
+ curl:60, tri:60
+};
 function restOf(id){return REST[id]||60;}
+function restLabel(id){
+ var r=restOf(id);
+ return (r%60===0)?(r/60)+" min":fmtT(r);
+}
 function setsOf(id){var m=/^\s*(\d+)\s*x/i.exec(EX[id].s);return m?+m[1]:3;}
 
 
@@ -501,6 +519,7 @@ function loadHint(id,w){
 /* plate-loaded lifts: which bar they start from, and the plates on hand */
 var PLATE={
  pc:{bar:45,kind:"barbell"}, hc:{bar:45,kind:"barbell"}, rdl:{bar:45,kind:"barbell"},
+ bsqt:{bar:45,kind:"barbell"},
  bsq:{bar:0,kind:"perside"}, bsqv:{bar:0,kind:"perside"}, tbj:{bar:55,kind:"barbell"}
 };
 var PLATES=[45,35,25,10,5,2.5];
@@ -585,8 +604,6 @@ function entries(id){return S.log.filter(function(x){return x.ex===id;});}
 function best(id){if(!isLoaded(id))return null;var e=entries(id).filter(function(x){return typeof x.load==="number";});
  if(!e.length)return null;return e.reduce(function(a,b){return b.load>a.load?b:a;});}
 function isDeload(w){return w===4||w===8;}
-function fmtT(s){s=Math.max(0,Math.round(s));var m=Math.floor(s/60),r=s%60;
- return m+":"+(r<10?"0":"")+r;}
 
 /* ============ adaptive targets ============ */
 function actualAt(id,w){if(!isLoaded(id))return null;var v=null;
@@ -762,6 +779,7 @@ function viewSession(){
   h+='<div class="exCard" data-ex="'+id+'" data-done="'+(nd>=ns?1:0)+'" data-part="'+(nd&&nd<ns?1:0)+'">'+
    '<button class="exTop"><span class="idx num">'+(nd>=ns?"&#10003;":(n+1))+'</span>'+
    '<span class="exMain"><b>'+esc(e.n)+'</b><span>'+esc(e.s)+
+     ' &middot; '+esc(restLabel(id))+' rest'+
      (nd?' &middot; '+nd+'/'+ns+' done':'')+'</span></span>'+
    '<span class="tgtBox"><b class="num">'+esc(TL.v)+'</b><span>'+esc(TL.u)+'</span></span></button>'+
    '<div class="exBody">';
@@ -988,7 +1006,7 @@ function completeSet(row){
  var ns=setsOf(id),nd=A.sets[id].filter(function(x){return x.done;}).length;
  card.dataset.done=nd>=ns?"1":"0";card.dataset.part=(nd&&nd<ns)?"1":"0";
  if(nd>=ns)card.querySelector(".idx").innerHTML="\u2713";
- card.querySelector(".exMain span").innerHTML=esc(EX[id].s)+" &middot; "+nd+"/"+ns+" done";
+ card.querySelector(".exMain span").innerHTML=esc(EX[id].s)+" &middot; "+esc(restLabel(id))+" rest &middot; "+nd+"/"+ns+" done";
  if(nd<ns){A.rest={ex:id,left:restOf(id),at:Date.now()};
   var old=document.getElementById("restBar");if(old)old.remove();
   document.body.insertAdjacentHTML("beforeend",restBar(A.rest));
@@ -1133,7 +1151,7 @@ function viewProgress(){
 function viewGuide(){
  var G=[["Jumps & plyos",["pogo","boxj","depth","slpogo","tbj","dunk"]],
   ["Olympic lifts",["pc","hc"]],
-  ["Lower body",["bsq","bsqv","rfe","rev","rdl","nord","legx","scalf","seatcalf","tib"]],
+  ["Lower body",["bsqt","bsq","bsqv","rfe","rev","rdl","nord","legx","scalf","seatcalf","tib"]],
   ["Upper body",["incdb","lmp","dip","chin","row","wide","sapd","lat","latc","lean","rear","face","curl","tri"]],
   ["Core",["hlr","ccr","pallof","serr"]]];
  var h='<div class="block"><div class="note" style="padding-top:16px">'+
@@ -1142,7 +1160,7 @@ function viewGuide(){
   h+='<div class="block"><div class="grp">'+esc(g[0])+'</div><div class="exList">';
   g[1].forEach(function(id){var e=EX[id];
    h+='<div class="exCard" data-ex="'+id+'"><button class="exTop">'+
-    '<span class="exMain"><b>'+esc(e.n)+'</b><span>'+esc(e.s)+'</span></span>'+
+    '<span class="exMain"><b>'+esc(e.n)+'</b><span>'+esc(e.s)+' &middot; '+esc(restLabel(id))+' rest</span></span>'+
     '<svg class="chev" viewBox="0 0 10 16"><path d="M2 1l6 7-6 7"/></svg></button>'+
     '<div class="exBody"><div class="maxim"><b>Maximize</b><p>'+esc(e.max)+'</p></div>'+
     '<div class="how">'+esc(e.how)+'</div></div></div>';});
