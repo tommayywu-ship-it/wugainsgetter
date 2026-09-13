@@ -166,6 +166,16 @@ body[data-rest="1"] .exList{padding-bottom:150px}
 .setRow:first-child{border-top:0}
 .setN{flex:0 0 34px;font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--dim);
   text-transform:uppercase}
+.cell{position:relative;flex:1;min-width:0;display:flex}
+.cell input{width:100%}
+.cell.hasCopy input{padding-right:26px}
+.cellCopy{position:absolute;right:1px;top:1px;bottom:1px;width:26px;
+  display:grid;place-items:center;background:linear-gradient(to left,var(--s2) 68%,transparent);
+  border:0;border-radius:0 2px 2px 0;padding:0}
+.cellCopy svg{width:15px;height:15px;fill:none;stroke:var(--dim);stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.cellCopy:active svg{stroke:var(--acc)}
+.setRow[data-done="1"] .cellCopy{display:none}
 .setRow input{flex:1;min-width:0;min-height:var(--tap);padding:9px 4px;background:#000;
   color:var(--fg);border:1px solid var(--line);border-radius:2px;text-align:center;
   font-family:'Anton';font-size:19px}
@@ -289,8 +299,7 @@ nav button[data-on="1"] .nb{background:var(--acc)}
 .chip:active{background:var(--s3)}
 .chip.barchip{background:none;color:var(--acc);border-color:var(--acc)}
 .chip.barchip[data-on="1"]{background:var(--acc);color:var(--on)}
-.chip.zero,.chip.clr,.chip.cpy{font-size:14px}
-.chip.cpy{color:var(--fg);border-color:var(--dim)}
+.chip.zero,.chip.clr{font-size:14px}
 .chip.clr{color:var(--dim)}
 
 .chipTot b{font-family:'Anton';font-weight:400;font-size:16px;color:var(--acc);letter-spacing:0}
@@ -548,26 +557,6 @@ function seedBarFlag(id,inp){
  inp.dataset.baron=(!isNaN(v)&&v>=c.bar)?"1":"0";
 }
 
-/* Copy = the target on set 1, or whatever you actually did on the set before */
-function copySource(id,inp){
- var row=inp.closest(".setRow"),i=+row.dataset.set;
- var A=activeHere();
- if(i>0&&A&&A.sets[id]&&A.sets[id][i-1]){
-  var prev=A.sets[id][i-1];
-  if(prev.load!=null)return {v:prev.load,from:"set "+i};
- }
- var t=loadHint(id,route.w);
- if(t!=null)return {v:t,from:"target"};
- return null;
-}
-function syncCopyChip(card,id,inp){
- var box=card.querySelector("[data-chips]");if(!box)return;
- var btn=box.querySelector('[data-plate="copy"]');if(!btn||!inp)return;
- var src=copySource(id,inp);
- if(!src){btn.disabled=true;btn.style.opacity=".35";btn.textContent="Copy";return;}
- btn.disabled=false;btn.style.opacity="";
- btn.textContent=(src.from==="target"?"Use target":"Copy "+src.from);
-}
 function chipBar(id){
  var c=plateCfg(id);if(!c)return "";
  var h='<div class="plateBox" data-chips="'+id+'">'+
@@ -580,8 +569,7 @@ function chipBar(id){
   h+='<button type="button" class="chip zero barchip" data-plate="0">+ Bar '+c.bar+'</button>';
  else
   h+='<button type="button" class="chip zero" data-plate="0">Reset</button>';
- h+='<button type="button" class="chip cpy" data-plate="copy">Copy</button>'+
-   '<button type="button" class="chip clr" data-plate="clear">Clear</button>'+
+ h+='<button type="button" class="chip clr" data-plate="clear">Clear</button>'+
    '</div></div>';
  return h;
 }
@@ -793,16 +781,23 @@ function viewSession(){
     var s0=(sets&&sets[i])||{};
     h+='<div class="setRow" data-set="'+i+'" data-done="'+(s0.done?1:0)+'">'+
      '<span class="setN">Set '+(i+1)+'</span>'+
+
      FL.map(function(f){
       var val=s0[f.f]!=null?s0[f.f]:"";
       var ph=(f.f==="load"&&hint!=null)?hint:"\u2014";
       var lockLoad=(f.f==="load"&&plateCfg(id));
-      if(lockLoad)
-       return '<input type="text" readonly data-f="load" class="locked" value="'+val+
-              '" placeholder="'+ph+'" aria-label="Load set '+(i+1)+', use the plate buttons below">';
-      var im=(f.f==="reps")?"numeric":"decimal";
-      return '<input type="number" inputmode="'+im+'" data-f="'+f.f+'" value="'+val+
-             '" placeholder="'+ph+'" aria-label="'+esc(f.l)+' set '+(i+1)+'">';}).join("")+
+      var box=lockLoad
+       ? '<input type="text" readonly data-f="load" class="locked" value="'+val+
+         '" placeholder="'+ph+'" aria-label="Load set '+(i+1)+', use the plate buttons below">'
+       : '<input type="number" inputmode="'+((f.f==="reps")?"numeric":"decimal")+
+         '" data-f="'+f.f+'" value="'+val+'" placeholder="'+ph+
+         '" aria-label="'+esc(f.l)+' set '+(i+1)+'">';
+      var cp=(i>0)
+       ? '<button type="button" class="cellCopy" data-cp="'+f.f+'" data-cpset="'+i+
+         '" aria-label="Copy '+esc(f.l)+' from set '+i+'">'+
+         '<svg viewBox="0 0 16 16"><path d="M4 10.5 L8 6.5 L12 10.5"/></svg></button>'
+       : '';
+      return '<span class="cell'+(i>0?" hasCopy":"")+'">'+box+cp+'</span>';}).join("")+
      '<button class="setDone" aria-label="Complete set"><svg viewBox="0 0 18 18"><path d="M3 9l4 4.5L15 4"/></svg></button>'+
      '</div>';}
    if(plateCfg(id))h+=chipBar(id);
@@ -851,6 +846,33 @@ function wireSession(){
  if(A){
   document.querySelectorAll(".setRow .setDone").forEach(function(b){
    b.onclick=function(){completeSet(b.closest(".setRow"));};});
+
+  document.querySelectorAll("[data-cp]").forEach(function(btn){
+   var row=btn.closest(".setRow"),card=btn.closest(".exCard"),id=card.dataset.ex;
+   var f=btn.dataset.cp,i=+btn.dataset.cpset;
+   btn.onclick=function(e){
+    e.preventDefault();e.stopPropagation();
+    // read the row above as it stands on screen right now
+    var prevRow=card.querySelector('.setRow[data-set="'+(i-1)+'"]');
+    if(!prevRow)return;
+    var from=prevRow.querySelector('[data-f="'+f+'"]');
+    var to=row.querySelector('[data-f="'+f+'"]');
+    if(!from||!to)return;
+    if(from.value===""){toast("Set "+i+" is empty");return;}
+    to.value=from.value;
+    if(f==="load"){
+     var bw2=(plateCfg(id)||{}).bar||0,lv=parseFloat(to.value);
+     to.dataset.baron=(bw2>0&&!isNaN(lv)&&lv>=bw2)?"1":"0";
+     card._live=to;
+     card.querySelectorAll(".setRow").forEach(function(r){r.dataset.live="0";});
+     row.dataset.live="1";
+     var tot=card.querySelector("[data-tot]");
+     if(tot)tot.innerHTML=chipReadout(id,to.value);
+     syncBarChip(card,id,to);}
+    stashSet(row);
+    if(navigator.vibrate)navigator.vibrate(8);
+   };});
+
   document.querySelectorAll(".setRow input").forEach(function(inp){
    inp.onchange=function(){stashSet(inp.closest(".setRow"));};});
 
@@ -864,7 +886,7 @@ function wireSession(){
     var tot=card.querySelector("[data-tot]");
     if(tot)tot.innerHTML=chipReadout(card.dataset.ex,inp.value);
     syncBarChip(card,card.dataset.ex,inp);
-    syncCopyChip(card,card.dataset.ex,inp);};
+    };
    card.querySelectorAll('.setRow input[data-f="load"]').forEach(function(inp){
     seedBarFlag(card.dataset.ex,inp);
     inp.addEventListener("focus",function(){mark(inp);});
@@ -874,7 +896,7 @@ function wireSession(){
      var tot=card.querySelector("[data-tot]");
      if(tot)tot.innerHTML=chipReadout(card.dataset.ex,inp.value);
      syncBarChip(card,card.dataset.ex,inp);
-     syncCopyChip(card,card.dataset.ex,inp);});});
+     });});
    var first=card.querySelector('.setRow:not([data-done="1"]) input[data-f="load"]')
              ||card.querySelector('input[data-f="load"]');
    if(first)mark(first);});
@@ -892,13 +914,7 @@ function wireSession(){
      var p=btn.dataset.plate,cur=parseFloat(inp.value);
      if(isNaN(cur))cur=0;
      var cfg=plateCfg(id)||{};
-     if(p==="copy"){
-      var src=copySource(id,inp);
-      if(!src)return;
-      cur=src.v;
-      var bwc=(plateCfg(id)||{}).bar||0;
-      inp.dataset.baron=(bwc>0&&cur>=bwc)?"1":"0";}
-     else if(p==="clear"){cur=0;inp.dataset.baron="0";}
+     if(p==="clear"){cur=0;inp.dataset.baron="0";}
      else if(p==="0"){
       var bw=cfg.bar||0;
       if(bw>0){
@@ -914,7 +930,6 @@ function wireSession(){
      var tot=card.querySelector("[data-tot]");
      if(tot)tot.innerHTML=chipReadout(id,inp.value);
      syncBarChip(card,id,inp);
-     syncCopyChip(card,id,inp);
      if(navigator.vibrate)navigator.vibrate(8);
     });});});
   var sk=document.getElementById("skipRest");
