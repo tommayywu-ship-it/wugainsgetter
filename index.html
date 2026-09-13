@@ -171,6 +171,8 @@ body[data-rest="1"] .exList{padding-bottom:150px}
   font-family:'Anton';font-size:19px}
 .setRow input::placeholder{color:#4A4A48}
 .setRow input:focus{border-color:var(--acc)}
+.setRow input.locked{caret-color:transparent;cursor:pointer;background:var(--s2)}
+.setRow[data-live="1"] input.locked{background:#000;border-color:var(--acc)}
 .setDone{flex:0 0 var(--tap);height:var(--tap);border:1px solid var(--line);border-radius:2px;
   display:grid;place-items:center}
 .setDone svg{width:17px;height:17px;stroke:var(--dim);stroke-width:2.6;fill:none;
@@ -183,6 +185,8 @@ body[data-rest="1"] .exList{padding-bottom:150px}
 .setHd{display:flex;gap:9px;padding:2px 0 0}
 .setHd span{font-size:9.5px;font-weight:700;letter-spacing:.12em;color:var(--dim);
   text-transform:uppercase;text-align:center;flex:1}
+.plateBox .hintline{padding:0 10px 9px;font-size:10px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--dim)}
 .setHd .sp{flex:0 0 34px}
 .setHd .sp2{flex:0 0 var(--tap)}
 
@@ -457,9 +461,9 @@ function modeOf(id){return MODE[id]||"load";}
 function isLoaded(id){var m=modeOf(id);return m==="load"||m==="bwplus"||m==="bar";}
 
 var FIELDS={
- load:    [{f:"load",l:"Load"},{f:"reps",l:"Reps"},{f:"rpe",l:"RPE"}],
- bw:      [{f:"reps",l:"Reps"},{f:"rpe",l:"RPE"}],
- bwplus:  [{f:"load",l:"+ lb"},{f:"reps",l:"Reps"},{f:"rpe",l:"RPE"}],
+ load:    [{f:"load",l:"Load"},{f:"reps",l:"Reps"}],
+ bw:      [{f:"reps",l:"Reps"}],
+ bwplus:  [{f:"load",l:"+ lb"},{f:"reps",l:"Reps"}],
  height:  [{f:"load",l:"Box in"},{f:"reps",l:"Reps"}],
  bar:     [{f:"load",l:"+ plates"},{f:"reps",l:"Reps"}],
  attempts:[{f:"reps",l:"Attempts"},{f:"touch",l:"Best in"}]
@@ -570,7 +574,7 @@ function chipBar(id){
    '<div class="chipTot" data-tot="'+id+'"></div><div class="chips">';
  PLATES.forEach(function(pl){
   h+='<button type="button" class="chip" data-plate="'+pl+'">+'+pl+'&times;2</button>';});
- h+='</div><div class="chipsAlt">';
+ h+='</div><div class="hintline">Tap a set, then build the load with these</div><div class="chipsAlt">';
  if(c.kind==="perside"){}
  else if(c.haveBar)
   h+='<button type="button" class="chip zero barchip" data-plate="0">+ Bar '+c.bar+'</button>';
@@ -792,9 +796,12 @@ function viewSession(){
      FL.map(function(f){
       var val=s0[f.f]!=null?s0[f.f]:"";
       var ph=(f.f==="load"&&hint!=null)?hint:"\u2014";
-      var step=(f.f==="rpe")?' step="0.5"':'';
+      var lockLoad=(f.f==="load"&&plateCfg(id));
+      if(lockLoad)
+       return '<input type="text" readonly data-f="load" class="locked" value="'+val+
+              '" placeholder="'+ph+'" aria-label="Load set '+(i+1)+', use the plate buttons below">';
       var im=(f.f==="reps")?"numeric":"decimal";
-      return '<input type="number" inputmode="'+im+'"'+step+' data-f="'+f.f+'" value="'+val+
+      return '<input type="number" inputmode="'+im+'" data-f="'+f.f+'" value="'+val+
              '" placeholder="'+ph+'" aria-label="'+esc(f.l)+' set '+(i+1)+'">';}).join("")+
      '<button class="setDone" aria-label="Complete set"><svg viewBox="0 0 18 18"><path d="M3 9l4 4.5L15 4"/></svg></button>'+
      '</div>';}
@@ -861,6 +868,7 @@ function wireSession(){
    card.querySelectorAll('.setRow input[data-f="load"]').forEach(function(inp){
     seedBarFlag(card.dataset.ex,inp);
     inp.addEventListener("focus",function(){mark(inp);});
+    if(inp.readOnly)inp.addEventListener("click",function(e){e.preventDefault();mark(inp);inp.blur();});
     inp.addEventListener("input",function(){
      seedBarFlag(card.dataset.ex,inp);
      var tot=card.querySelector("[data-tot]");
