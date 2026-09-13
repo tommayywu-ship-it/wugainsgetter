@@ -336,9 +336,9 @@ var EX={
  slpogo:{n:"Single-leg pogo",s:"3 x 10 /leg",loads:null,unit:"BW",
   max:"Speed only, one leg. Stop the moment the rhythm breaks.",
   how:"Balance on one leg, other knee bent out of the way, bounce off the ball of the foot with the standing knee near-locked. Expect far fewer clean reps than the double-leg version — that drop-off is the point. It exposes the single-leg stiffness gap."},
- tbj:{n:"Trap bar jump",s:"3 x 3",loads:["bar","bar","bar+10","bar","bar+10","bar+10","bar+20","bar+20"],unit:"",
+ tbj:{n:"Trap bar jump",s:"3 x 3",loads:[55,55,65,55,65,65,75,75],unit:"lb",
   max:"Air time. Feet must fully leave the floor every rep.",
-  how:"Low handles, quick dip to a quarter squat, jump so the feet clear the ground. Land soft, reset between reps. Count the bar in your total — about 30% of bodyweight is the target, so the empty bar is roughly right for you."},
+  how:"Low handles, quick dip to a quarter squat, jump so the feet clear the ground. Land soft, reset between reps. The bar counts as load, so 55 on its own is already about 30% of your bodyweight — which is the target. Add plates only if your feet are clearing the floor easily."},
  dunk:{n:"Dunk attempts",s:"10-15 max",loads:null,unit:"",
   max:"Touch height. When the touch drops, the set is over.",
   how:"Full-speed approach, plant, jump to touch or dunk. Full recovery between attempts. Skill practice, not conditioning — every rep a genuine max. Wear what you'd actually play in."},
@@ -465,16 +465,15 @@ function setsOf(id){var m=/^\s*(\d+)\s*x/i.exec(EX[id].s);return m?+m[1]:3;}
 var MODE={};
 ["pogo","boxj","slpogo","tib","nord","pallof","serr"].forEach(function(k){MODE[k]="bw";});
 ["hlr","dip","chin"].forEach(function(k){MODE[k]="bwplus";});
-MODE.depth="height"; MODE.tbj="bar"; MODE.dunk="attempts";
+MODE.depth="height"; MODE.dunk="attempts";
 function modeOf(id){return MODE[id]||"load";}
-function isLoaded(id){var m=modeOf(id);return m==="load"||m==="bwplus"||m==="bar";}
+function isLoaded(id){var m=modeOf(id);return m==="load"||m==="bwplus";}
 
 var FIELDS={
  load:    [{f:"load",l:"Load"},{f:"reps",l:"Reps"}],
  bw:      [{f:"reps",l:"Reps"}],
  bwplus:  [{f:"load",l:"+ lb"},{f:"reps",l:"Reps"}],
  height:  [{f:"load",l:"Box in"},{f:"reps",l:"Reps"}],
- bar:     [{f:"load",l:"+ plates"},{f:"reps",l:"Reps"}],
  attempts:[{f:"reps",l:"Attempts"},{f:"touch",l:"Best in"}]
 };
 function fieldsOf(id){return FIELDS[modeOf(id)];}
@@ -485,11 +484,6 @@ function targetLabel(id,w){
  if(m==="bw")return {v:"BW",u:"bodyweight"};
  if(m==="attempts")return {v:e.s.split(" ")[0],u:"attempts"};
  if(m==="height")return {v:(t==null?"\u2014":String(t).replace(/\s*in$/,"")),u:"in box"};
- if(m==="bar"){
-  var add=0,str=(t==null?"":String(t)),mm=/\+\s*(\d+)/.exec(str);
-  if(mm)add=+mm[1];
-  if(S.barWeight)return {v:S.barWeight+add,u:"lb total"};
-  return {v:add?("bar+"+add):"bar",u:"set bar wt"};}
  if(m==="bwplus"&&(t==null||t==="BW"))return {v:"BW",u:"bodyweight"};
  if(t==null)return {v:"\u2014",u:"no target"};
  return {v:t,u:e.unit||"target"};
@@ -499,7 +493,6 @@ function loadHint(id,w){
  var m=modeOf(id),t=targetFor(id,w);
  if(m==="load"&&typeof t==="number")return t;
  if(m==="height"){var h=/(\d+)/.exec(String(t||""));return h?+h[1]:null;}
- if(m==="bar"){var b=/\+\s*(\d+)/.exec(String(t||""));return b?+b[1]:0;}
  if(m==="bwplus"&&typeof t==="number")return t;
  return null;
 }
@@ -508,12 +501,12 @@ function loadHint(id,w){
 /* plate-loaded lifts: which bar they start from, and the plates on hand */
 var PLATE={
  pc:{bar:45,kind:"barbell"}, hc:{bar:45,kind:"barbell"}, rdl:{bar:45,kind:"barbell"},
- bsq:{bar:0,kind:"perside"}, bsqv:{bar:0,kind:"perside"}, tbj:{bar:null,kind:"trap"}
+ bsq:{bar:0,kind:"perside"}, bsqv:{bar:0,kind:"perside"}, tbj:{bar:55,kind:"barbell"}
 };
 var PLATES=[45,35,25,10,5,2.5];
 function plateCfg(id){
  var c=PLATE[id];if(!c)return null;
- if(c.kind==="trap")return {bar:S.barWeight||0,kind:"trap",haveBar:!!S.barWeight};
+ if(id==="tbj")return {bar:(S.barWeight||55),kind:"barbell",haveBar:true};
  return {bar:c.bar,kind:c.kind,haveBar:true};
 }
 function round25(n){return Math.round(n*4)/4;}
@@ -575,7 +568,7 @@ function chipBar(id){
 }
 
 /* ============ state ============ */
-var S={week:1,reach:null,touch:null,barWeight:null,log:[],done:{},active:null,sessions:[]};
+var S={week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]};
 function load(){try{var r=localStorage.getItem("vert.v2");
  if(r){S=Object.assign(S,JSON.parse(r));}
  else{var o=localStorage.getItem("vert.v1");if(o)S=Object.assign(S,JSON.parse(o));}}catch(e){}}
@@ -801,8 +794,6 @@ function viewSession(){
      '<button class="setDone" aria-label="Complete set"><svg viewBox="0 0 18 18"><path d="M3 9l4 4.5L15 4"/></svg></button>'+
      '</div>';}
    if(plateCfg(id))h+=chipBar(id);
-   if(modeOf(id)==="bar"&&!S.barWeight)
-    h+='<div class="hist" style="color:var(--acc)">Set your trap bar weight on the Data tab to see the total</div>';
   }
   h+='<div class="maxim"><b>Maximize</b><p>'+esc(e.max)+'</p></div>'+
    '<div class="how">'+esc(e.how)+'</div>'+
@@ -1042,7 +1033,6 @@ function finishWorkout(){
    reps=Math.max(reps,s.reps||0);
    if(s.rpe!=null)rpe=s.rpe;
    if(s.touch!=null&&(touch===null||s.touch>touch))touch=s.touch;});
-  if(md==="bar"&&load!==null&&S.barWeight)load=S.barWeight+load;
   var prev=best(id);
   S.log.push({date:date,day:DAYS[A.day].k,week:A.week,ex:id,
    mode:md,load:load,sets:rows.length,reps:reps,rpe:rpe,touch:touch,
@@ -1173,7 +1163,7 @@ function viewData(){
   '<input type="number" inputmode="decimal" id="inBar" value="'+(S.barWeight||"")+'" placeholder="—"></div></div>'+
   '<div class="row"><button class="btn" id="saveReach" style="flex:1">Save numbers</button></div>'+
   '<div class="note">Stand flat-footed against a wall and reach up with one arm — that is your standing reach. Then jump and mark the highest point you touch. The rim is 120 inches.<br><br>'+
-  'Trap bars run 45–75 lb and the bar counts as load you accelerate, so enter yours and the jump target shows a real total instead of just "bar".</div></div>';
+  'Trap bar defaults to 55 lb. The bar counts as load you accelerate, so the target for the jump is a total that already includes it — 55 on its own is about 30% of your bodyweight. Change this if your bar is a different weight.</div></div>';
  h+='<div class="block"><div class="blockHd"><h2>Backups</h2><span class="cnt">'+S.log.length+' entries</span></div>'+
   '<div class="note">Everything lives in this browser only. It will not follow you to another phone and clearing site data wipes it. Export every few weeks.</div>'+
   '<div class="row"><button class="btn" id="exp">Export backup</button>'+
@@ -1206,13 +1196,13 @@ function wireData(){
  document.getElementById("impFile").onchange=function(ev){
   var f=ev.target.files[0];if(!f)return;var fr=new FileReader();
   fr.onload=function(){try{var o=JSON.parse(fr.result);if(!o||!Array.isArray(o.log))throw 0;
-   S=Object.assign({week:1,reach:null,touch:null,barWeight:null,log:[],done:{},active:null,sessions:[]},o);
+   S=Object.assign({week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]},o);
    save();toast("Restored");go("#/w"+S.week);render();
   }catch(e){toast("Not a valid backup");}};
   fr.readAsText(f);};
  document.getElementById("wipe").onclick=function(){
   if(confirm("Erase all sessions and numbers? This cannot be undone.")){
-   S={week:1,reach:null,touch:null,barWeight:null,log:[],done:{},active:null,sessions:[]};
+   S={week:1,reach:null,touch:null,barWeight:55,log:[],done:{},active:null,sessions:[]};
    save();toast("Erased");render();}};}
 function dl(txt,name,mime){
  var b=new Blob([txt],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");
