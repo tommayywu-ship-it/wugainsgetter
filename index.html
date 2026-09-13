@@ -480,6 +480,9 @@ var W=8, KEY=["bsqt","bsq","pc","hc","rfe","scalf","legx","incdb","seatcalf"];
 /* rest seconds by exercise category */
 function fmtT(s){s=Math.max(0,Math.round(s));var m=Math.floor(s/60),r=s%60;
  return m+":"+(r<10?"0":"")+r;}
+/* local calendar date, not UTC - an 8pm session must not land on tomorrow */
+function dayKey(ts){var d=(ts==null)?new Date():new Date(ts);
+ return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2);}
 var REST={
  dunk:240,
  bsq:180, bsqt:180,
@@ -760,13 +763,21 @@ function wireTrain(){
  if(nw)nw.onclick=function(){if(route.w<W)go("#/w"+(route.w+1));};
  document.querySelectorAll("[data-d]").forEach(function(b){
   b.onclick=function(){go("#/s/w"+route.w+"-d"+b.dataset.d);};});
- var t=document.getElementById("app"),x0=null;
- t.addEventListener("touchstart",function(e){x0=e.touches[0].clientX;},{passive:true});
+}
+/* bound once, and only ever acts on the week screen */
+(function(){
+ var t=document.getElementById("app"),x0=null,y0=null;
+ t.addEventListener("touchstart",function(e){
+  x0=e.touches[0].clientX;y0=e.touches[0].clientY;},{passive:true});
  t.addEventListener("touchend",function(e){
-  if(x0===null)return;var dx=e.changedTouches[0].clientX-x0;x0=null;
-  if(Math.abs(dx)<64)return;
+  var sx=x0,sy=y0;x0=null;y0=null;
+  if(sx===null||route.v!=="train")return;
+  if(e.target.closest(".tblWrap,.chips,input,button"))return;
+  var dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+  if(Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.8)return;
   if(dx<0&&route.w<W)go("#/w"+(route.w+1));
-  if(dx>0&&route.w>1)go("#/w"+(route.w-1));},{passive:true});}
+  if(dx>0&&route.w>1)go("#/w"+(route.w-1));},{passive:true});
+})();
 
 /* ============ session ============ */
 function activeHere(){return S.active&&S.active.id===sid(route.d,route.w)?S.active:null;}
@@ -1064,7 +1075,7 @@ function stopTick(){if(tick){clearInterval(tick);tick=null;}}
 
 function finishWorkout(){
  var A=activeHere();if(!A)return;
- var d=DAYS[A.day],date=new Date().toISOString().slice(0,10),n=0,bestTouch=null;
+ var d=DAYS[A.day],date=dayKey(),n=0,bestTouch=null;
  d.ex.forEach(function(id){
   var rows=(A.sets[id]||[]).filter(function(s){return s.done;});
   if(!rows.length)return;
@@ -1141,19 +1152,30 @@ function sessionPct(rec){
 }
 /* date string -> {pct, name} for everything finished or in progress */
 function calData(){
- var map={};
+ var map={},put=function(k,pct,name,extra){
+  if(!k)return;
+  if(!map[k]||pct>map[k].pct)map[k]=Object.assign({pct:pct,name:name},extra||{});};
+
  S.sessions.forEach(function(rec){
   var ts=rec.finishedAt||rec.startedAt;if(!ts)return;
-  var k=new Date(ts).toISOString().slice(0,10);
-  var pct=sessionPct(rec);
-  if(!map[k]||pct>map[k].pct)map[k]={pct:pct,name:DAYS[rec.day].t,done:!!rec.finishedAt};});
- if(S.active){
-  var k2=new Date(S.active.startedAt).toISOString().slice(0,10);
-  var p2=sessionPct(S.active);
-  if(!map[k2]||p2>map[k2].pct)map[k2]={pct:p2,name:DAYS[S.active.day].t,live:true};}
- // volleyball and other logged work that never became a session record
+  put(dayKey(ts),sessionPct(rec),DAYS[rec.day]?DAYS[rec.day].t:"Session",{done:!!rec.finishedAt});});
+
+ if(S.active)
+  put(dayKey(S.active.startedAt),sessionPct(S.active),
+      DAYS[S.active.day]?DAYS[S.active.day].t:"Session",{live:true});
+
+ /* anything logged before session records existed, or logged without pressing Finish:
+    work out completion from how many of that day's exercises have entries */
+ var byDate={};
  S.log.forEach(function(x){
-  if(!map[x.date])map[x.date]={pct:0.34,name:"Logged",done:true};});
+  if(!x.date)return;
+  (byDate[x.date]=byDate[x.date]||{ex:{},day:x.day}).ex[x.ex]=true;});
+ Object.keys(byDate).forEach(function(k){
+  var b=byDate[k],di=-1;
+  DAYS.forEach(function(d,i){if(d.k===b.day)di=i;});
+  var total=(di>=0&&DAYS[di].ex.length)?DAYS[di].ex.length:Object.keys(b.ex).length;
+  var pct=Math.min(1,Object.keys(b.ex).length/Math.max(1,total));
+  put(k,pct,di>=0?DAYS[di].t:"Logged",{done:true});});
  return map;
 }
 function viewCalendar(){
@@ -1161,7 +1183,7 @@ function viewCalendar(){
  var y=calM.y,m=calM.m,data=calData();
  var first=new Date(y,m,1),lead=(first.getDay()+6)%7;      // Monday-first
  var days=new Date(y,m+1,0).getDate();
- var todayK=new Date().toISOString().slice(0,10);
+ var todayK=dayKey();
  var hit=0,sets=0;
  var h='<div class="block"><div class="calTop">'+
   '<button class="ic" id="cPrev" aria-label="Previous month">'+ICO.left+'</button>'+
@@ -1179,8 +1201,8 @@ function viewCalendar(){
      (e?'<i style="height:'+(pct*100).toFixed(0)+'%"></i>':'')+
      '<em>'+d2+'</em></span>';
  }
- h+='</div><div class="calFoot">'+hit+' session'+(hit===1?"":"s")+' this month'+
-  ' &middot; squares fill with how much of the workout you finished</div></div>';
+ h+='</div><div class="calFoot">'+(hit?(hit+' session'+(hit===1?"":"s")+' this month &middot; squares fill with how much of the workout you finished')
+  :'Nothing logged this month yet &middot; squares fill as you complete sets')+'</div></div>';
  return h;
 }
 function wireCalendar(){
@@ -1309,7 +1331,7 @@ function wireData(){
   else if(!bw){toast("Nothing to save");return;}
   save();toast("Saved");go("#/w"+S.week);};
  document.getElementById("exp").onclick=function(){
-  dl(JSON.stringify(S,null,2),"vert-backup-"+new Date().toISOString().slice(0,10)+".json","application/json");};
+  dl(JSON.stringify(S,null,2),"vert-backup-"+dayKey()+".json","application/json");};
  document.getElementById("csv").onclick=function(){
   var r=[["date","day","week","exercise","load","sets","reps","rpe","pr"]];
   S.log.forEach(function(x){r.push([x.date,x.day,x.week,(EX[x.ex]||{}).n||x.ex,x.load,x.sets,x.reps,x.rpe,x.pr?"PR":""]);});
